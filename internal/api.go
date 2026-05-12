@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type Config struct {
@@ -29,6 +30,12 @@ func MakeInitialCall() (Config, error){
 	if err := decoder.Decode(&data); err != nil{
 		return Config{}, fmt.Errorf("error when decoding date: %v", err)
 	}
+	
+	cache := NewCache(5 * time.Second)
+	for _, item := range data.Results{
+		cache.Add(item, )
+	}
+
 	return  data, nil
 }
 
