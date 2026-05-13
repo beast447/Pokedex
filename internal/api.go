@@ -3,6 +3,7 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -10,62 +11,183 @@ import (
 type Config struct {
 	Count    int    `json:"count"`
 	Next     string `json:"next"`
-	Previous string    `json:"previous"`
+	Previous string `json:"previous"`
 	Results  []struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	} `json:"results"`
+	Pokedex map[string]Pokemon
+}
+
+type Location struct {
+	PokemonEncounters []struct {
+		Pokemon struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"pokemon"`
+	} `json:"pokemon_encounters"`
+}
+
+type LocPokemon struct {
+	Name string
+	Url  string
+}
+
+type Pokemon struct {
+	Name string `json:"name"`
+	BaseExperience int `json:"base_experience"`
 }
 
 
-func MakeInitialCall() (Config, error){
+var cachedResult *Cache
+
+func MakeInitialCall() (Config, error) {
 	res, err := http.Get("https://pokeapi.co/api/v2/location-area/")
-	if err != nil{
+	if err != nil {
 		return Config{}, fmt.Errorf("error on initial fetch: %v", err)
 	}
 	defer res.Body.Close()
 
+	cacheData, err := io.ReadAll(res.Body)
+	if err != nil {
+		return Config{}, err
+	}
+
+	cachedResult = NewCache(5 * time.Minute)
+	cachedResult.Add("https://pokeapi.co/api/v2/location-area/", cacheData)
+
 	data := Config{}
-	decoder := json.NewDecoder(res.Body)
-	if err := decoder.Decode(&data); err != nil{
-		return Config{}, fmt.Errorf("error when decoding date: %v", err)
+	errr := json.Unmarshal(cacheData, &data)
+	if errr != nil {
+		return Config{}, fmt.Errorf("error when decoding data: %v", errr)
 	}
-	
-	cache := NewCache(5 * time.Second)
-	for _, item := range data.Results{
-		cache.Add(item, )
-	}
-
-	return  data, nil
-}
-
-func GetNextLocation(config Config) (Config, error) {
-	res, err := http.Get(config.Next)
-	if err != nil{
-		return Config{}, fmt.Errorf("error fetching next url: %v", err)
-	}
-	defer res.Body.Close()
-	
-	data := Config{}
-	decoder := json.NewDecoder(res.Body)
-	if err := decoder.Decode(&data); err != nil{
-		return Config{}, fmt.Errorf("error decoding next url: %v", err)
-	}
-
 	return data, nil
 }
 
-func GetLastLocation(config Config) (Config, error) {
-	res, err := http.Get(config.Previous)
-	if err != nil{
-		return Config{}, fmt.Errorf("error fetching previous url: %v", err)
+func GetNextLocation(config Config) (Config, error) {
+
+	result, err := makeCallWithConfig(config, "Next")
+	if err != nil {
+		return Config{}, err
 	}
-	defer res.Body.Close()
+	result.Pokedex = config.Pokedex
+	return result, nil
+}
+
+func GetLastLocation(config Config) (Config, error) {
+
+	result, err := makeCallWithConfig(config, "Previous")
+	if err != nil {
+		return Config{}, err
+	}
+	result.Pokedex = config.Pokedex
+	return result, nil
+}
+
+func GetPokemonAtLocation(location string) ([]LocPokemon, error) {
+
+	loc, err := makeCallWithString[Location](location, "Location")
+	if err != nil {
+		return []LocPokemon{}, err
+	}
 	
-	data := Config{}
-	decoder := json.NewDecoder(res.Body)
-	if err := decoder.Decode(&data); err != nil{
-		return Config{}, fmt.Errorf("error decoding previous url: %v", err)
+	result := make([]LocPokemon, 0, len(loc.PokemonEncounters))
+	for _, p := range loc.PokemonEncounters{
+		result = append(result, LocPokemon{Name: p.Pokemon.Name, Url: p.Pokemon.URL})
+	}
+	return result, nil
+
+}
+
+func FindPokemon(selectedPokemon string)(Pokemon, error) {
+	pok, err := makeCallWithString[Pokemon](selectedPokemon, "Pokemon")
+	if err != nil{
+		return Pokemon{}, err
+	}
+	return pok, nil
+}
+
+func makeCallWithConfig(config Config, path string) (Config, error) {
+
+	var url string
+	switch path {
+	case "Previous":
+		url = config.Previous
+	case "Next":
+		url = config.Next
 	}
 
-	return data, nil}
+	if cachedResult == nil {
+		return Config{}, fmt.Errorf("cache not initialized, call map first")
+	}
+	stuff, exists := cachedResult.Get(url)
+	if exists {
+		data := Config{}
+		err := json.Unmarshal(stuff, &data)
+		if err != nil {
+			return Config{}, err
+		}
+		return data, nil
+	}
+
+	res, err := http.Get(url)
+	if err != nil {
+		return Config{}, fmt.Errorf("error fetching %s url: %v", path, err)
+	}
+	defer res.Body.Close()
+
+	cacheData, err := io.ReadAll(res.Body)
+	if err != nil {
+		return Config{}, err
+	}
+
+	cachedResult.Add(url, cacheData)
+
+	data := Config{}
+	errr := json.Unmarshal(cacheData, &data)
+	if errr != nil {
+		return Config{}, fmt.Errorf("error when decoding data: %v", errr)
+	}
+	return data, nil
+}
+
+func makeCallWithString[T any](param string, path string) (T, error) {
+
+	var result T
+	var url string
+	switch path {
+	case "Location":
+		url = "https://pokeapi.co/api/v2/location-area/" + param
+	case "Pokemon":
+		url = "https://pokeapi.co/api/v2/pokemon/" + param
+	}
+
+	if cachedResult != nil {
+		if cached, exists := cachedResult.Get(url); exists {
+			if err := json.Unmarshal(cached, &result); err != nil {
+				return result, err
+			}
+			return result, nil
+		}
+	}
+
+	res, err := http.Get(url)
+	if err != nil {
+		return result, err
+	}
+	defer res.Body.Close()
+
+	cacheData, err := io.ReadAll(res.Body)
+	if err != nil {
+		return result, err
+	}
+
+	if cachedResult != nil {
+		cachedResult.Add(url, cacheData)
+	}
+	
+	if err := json.Unmarshal(cacheData, &result); err != nil{
+		return result, err
+	}
+	return result, nil
+}
