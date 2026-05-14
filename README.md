@@ -18,13 +18,23 @@ go build -o pokedexcli
 | `help` | Display all available commands |
 | `map` | Show the next 20 location areas |
 | `mapb` | Go back to the previous 20 location areas |
-| `explore <location>` | List all Pokemon found at a location |
+| `explore <location>` | List all Pokemon at a location and optionally catch one |
 | `catch <pokemon>` | Attempt to catch a Pokemon |
 | `pokedex` | View all your caught Pokemon |
 | `inspect <pokemon>` | View a caught Pokemon's stats and abilities |
 | `release <pokemon>` | Release a caught Pokemon from your Pokedex |
 | `battle <pokemon1> <pokemon2>` | Battle two of your caught Pokemon |
+| `compare <pokemon1> <pokemon2>` | Compare two of your caught Pokemon side by side |
 | `exit` | Save and quit |
+
+## Interactive UI
+
+The CLI uses [pterm](https://github.com/pterm/pterm) for a rich terminal experience:
+
+- **`explore`** — opens an interactive menu to pick a Pokemon to catch, with an option to stay in the area and try again
+- **`pokedex`** — opens an interactive list; select a Pokemon to inspect its full stats
+- **`catch`** — shows a spinner while throwing the Pokeball and renders the Pokemon's sprite as ASCII art on a successful catch
+- **`inspect`** — displays stats and abilities in formatted tables with the Pokemon's sprite
 
 ## Catching
 
@@ -32,14 +42,19 @@ Each Pokemon has a `base_experience` value from the PokeAPI. When you throw a Po
 
 ## Battling
 
-Battles are turn-based. Each Pokemon attacks using its `attack` stat, dealing that much damage to the opponent's `hp` each round. The first to reach 0 HP loses.
+Battles are turn-based. Each Pokemon attacks using one of its actual moves (falling back to its `attack` stat if no damaging move is found). HP bars are rendered each round with color-coded health levels. The first Pokemon to reach 0 HP loses.
+
+## Comparing
+
+`compare <pokemon1> <pokemon2>` displays both Pokemon's stats and abilities side by side in a panel layout, making it easy to size up your team.
 
 ## Project Structure
 
 ```
 .
-├── main.go          # REPL loop and command dispatch
-├── repl.go          # Command definitions and handlers
+├── main.go          # REPL loop, startup banner, and command dispatch
+├── repl.go          # Command definitions, handlers, and rendering
+├── repl_test.go     # Tests for input cleaning and helper logic
 └── internal/
     ├── api.go       # PokeAPI client and data types
     └── pokecache.go # Thread-safe in-memory cache
