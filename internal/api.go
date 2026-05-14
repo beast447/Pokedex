@@ -36,7 +36,19 @@ type LocPokemon struct {
 type Pokemon struct {
 	Name string `json:"name"`
 	BaseExperience int `json:"base_experience"`
+	Stats          []struct {
+		BaseStat int `json:"base_stat"`
+		Stat     struct {
+			Name string `json:"name"`
+		} `json:"stat"`
+	} `json:"stats"`
+	Abilities []struct {
+		Ability struct {
+			Name string `json:"name"`
+		} `json:"ability"`
+	} `json:"abilities"`
 }
+
 
 
 var cachedResult *Cache

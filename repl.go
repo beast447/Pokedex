@@ -12,7 +12,14 @@ import (
 type commands struct {
 	name        string
 	description string
-	callback    func(config *internal.Config, explore string) error
+	callback    func(config *internal.Config, first string, second string) error
+}
+
+type pokemonStats struct {
+	name   string
+	hp     int
+	attack int
+	dead   bool
 }
 
 var supportedCommands map[string]commands
@@ -50,9 +57,19 @@ func init() {
 			callback:    commandCatch,
 		},
 		"pokedex": {
-			name: "pokedex",
+			name:        "pokedex",
 			description: "Shows your current Pokedex",
-			callback: commandPokedex,
+			callback:    commandPokedex,
+		},
+		"inspect": {
+			name:        "inspect",
+			description: "Shows a captured pokemons stats like health, abilities , etc.",
+			callback:    commandInspect,
+		},
+		"battle": {
+			name:        "battle",
+			description: "Fight two pokemon that you have stored in your pokedex",
+			callback:    commandBattle,
 		},
 	}
 }
@@ -64,13 +81,70 @@ func cleanInput(text string) []string {
 	return slice
 }
 
-func commandExit(data *internal.Config, explore string) error {
+func getPokemonStats(config *internal.Config, firstPokemon string, secondPokemon string) ([]pokemonStats, error) {
+
+	pokemonOne, exists := config.Pokedex[firstPokemon]
+	if !exists {
+		fmt.Printf("%v is not in your pokedex!\n", firstPokemon)
+		return []pokemonStats{}, fmt.Errorf("%v is not in your pokedex!\n", firstPokemon)
+	}
+	fmt.Printf("%v is ready to fight!\n", pokemonOne.Name)
+
+	pokemonTwo, exists := config.Pokedex[secondPokemon]
+	if !exists {
+		return []pokemonStats{}, fmt.Errorf("%v is not in your pokedex!\n", secondPokemon)
+	}
+	fmt.Printf("%v is ready to fight!\n", pokemonTwo.Name)
+
+	var pokemonOneHp int
+	for _, p := range pokemonOne.Stats {
+		if p.Stat.Name == "hp" {
+			pokemonOneHp = p.BaseStat
+		}
+	}
+	var pokemonOneAttack int
+	for _, p := range pokemonOne.Stats {
+		if p.Stat.Name == "attack" {
+			pokemonOneAttack = p.BaseStat
+		}
+	}
+	var pokemonTwoHp int
+	for _, p := range pokemonTwo.Stats {
+		if p.Stat.Name == "hp" {
+			pokemonTwoHp = p.BaseStat
+		}
+	}
+	var pokemonTwoAttack int
+	for _, p := range pokemonTwo.Stats {
+		if p.Stat.Name == "attack" {
+			pokemonTwoAttack = p.BaseStat
+		}
+	}
+
+	sliceOfPokemonStats := []pokemonStats{
+		{
+			name:   firstPokemon,
+			hp:     pokemonOneHp,
+			attack: pokemonOneAttack,
+			dead:   false,
+		},
+		{
+			name:   secondPokemon,
+			hp:     pokemonTwoHp,
+			attack: pokemonTwoAttack,
+			dead:   false,
+		},
+	}
+	return sliceOfPokemonStats, nil
+}
+
+func commandExit(data *internal.Config, explore string, second string) error {
 	fmt.Print("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil
 }
 
-func commandHelp(data *internal.Config, explore string) error {
+func commandHelp(data *internal.Config, explore string, second string) error {
 	fmt.Print("Welcome to the Pokedex!\nUsage:\n\n")
 	for _, command := range supportedCommands {
 		fmt.Printf("%s: %s\n", command.name, command.description)
@@ -78,11 +152,12 @@ func commandHelp(data *internal.Config, explore string) error {
 	return nil
 }
 
-func commandMap(config *internal.Config, explore string) error {
+func commandMap(config *internal.Config, explore string, second string) error {
 	var err error
+	savedPokedex := config.Pokedex
 	if config.Next == "" {
 		*config, err = internal.MakeInitialCall()
-
+		config.Pokedex = savedPokedex
 	} else {
 		*config, err = internal.GetNextLocation(*config)
 	}
@@ -95,7 +170,7 @@ func commandMap(config *internal.Config, explore string) error {
 	return nil
 }
 
-func commandMapBack(config *internal.Config, explore string) error {
+func commandMapBack(config *internal.Config, explore string, second string) error {
 	var err error
 	if config.Previous == "" {
 		fmt.Println("you're on the first page")
@@ -112,7 +187,7 @@ func commandMapBack(config *internal.Config, explore string) error {
 	return nil
 }
 
-func commandExplore(config *internal.Config, explore string) error {
+func commandExplore(config *internal.Config, explore string, second string) error {
 
 	pokemon, err := internal.GetPokemonAtLocation(explore)
 	if err != nil {
@@ -125,7 +200,7 @@ func commandExplore(config *internal.Config, explore string) error {
 	return nil
 }
 
-func commandCatch(config *internal.Config, selectedPokemon string) error {
+func commandCatch(config *internal.Config, selectedPokemon string, second string) error {
 	userPokemon, err := internal.FindPokemon(selectedPokemon)
 	if err != nil {
 		return err
@@ -136,13 +211,13 @@ func commandCatch(config *internal.Config, selectedPokemon string) error {
 		config.Pokedex[selectedPokemon] = userPokemon
 		fmt.Printf("%v was caught!\n", selectedPokemon)
 	} else {
-		fmt.Printf("%v escaped!\n")
+		fmt.Printf("%v escaped!\n", selectedPokemon)
 	}
 	return nil
 }
 
-func commandPokedex (config *internal.Config, selectedPokemon string) error{
-	
+func commandPokedex(config *internal.Config, selectedPokemon string, second string) error {
+
 	if len(config.Pokedex) < 1 {
 		fmt.Println("You dont have any pokemon! Get Catching!")
 		return nil
@@ -150,9 +225,71 @@ func commandPokedex (config *internal.Config, selectedPokemon string) error{
 
 	fmt.Println("Your Pokedex:")
 
-	for _, p := range config.Pokedex{
+	for _, p := range config.Pokedex {
 		fmt.Printf("- %v\n", p.Name)
 	}
 
-return nil
+	return nil
+}
+
+func commandInspect(config *internal.Config, selectedPokemon string, second string) error {
+	if len(config.Pokedex) < 1 {
+		fmt.Println("You must catch a pokemon first to inspect it!")
+		return nil
+	}
+	userPokemon, exists := config.Pokedex[selectedPokemon]
+	if !exists {
+		fmt.Printf("%s doesnt exist in your Pokedex yet\n", selectedPokemon)
+		return nil
+	} else {
+		fmt.Printf("%v\n\n", userPokemon.Name)
+		fmt.Println("------STATS--------")
+		for _, stat := range userPokemon.Stats {
+			fmt.Printf("- %v: %v\n", stat.Stat.Name, stat.BaseStat)
+		}
+		fmt.Println("-----ABILITIES------")
+		for _, a := range userPokemon.Abilities {
+			fmt.Printf("- %v\n", a.Ability.Name)
+		}
+		fmt.Println("-------END---------\n\n")
+	}
+	return nil
+}
+
+func commandBattle(config *internal.Config, firstPokemon string, secondPokemon string) error {
+	pokemonStats, err := getPokemonStats(config, firstPokemon, secondPokemon)
+	if err != nil {
+		fmt.Printf("Error fetching pokemon stats: %v\n", err)
+	}
+	pokemonOne := pokemonStats[0]
+	pokemonTwo := pokemonStats[1]
+
+	fmt.Printf("%v attack: %v\n", pokemonOne.name, pokemonOne.attack)
+	fmt.Printf("%v HP: %v\n", pokemonTwo.name, pokemonTwo.hp)
+
+	for !pokemonOne.dead || !pokemonTwo.dead {
+
+		pokemonTwo.hp -= pokemonOne.attack
+		if pokemonTwo.hp < 1 {
+			pokemonTwo.dead = true
+			pokemonTwo.hp = 0
+			fmt.Printf("%v Wins!", pokemonOne.name)
+			return nil
+		}
+
+		fmt.Printf("%v attacks %v with %v points of damage\n", pokemonOne.name, pokemonTwo.name, pokemonOne.attack)
+		fmt.Printf("%v has %v points of health left\n", pokemonTwo.name, pokemonTwo.hp)
+
+		pokemonOne.hp -= pokemonTwo.attack
+		if pokemonOne.hp < 1 {
+			pokemonOne.dead = true
+			pokemonOne.hp = 0
+			fmt.Printf("%v Wins!\n", pokemonTwo.name)
+			return nil
+		}
+
+		fmt.Printf("%v attacks %v with %v points of damage\n", pokemonOne.name, pokemonTwo.name, pokemonOne.attack)
+		fmt.Printf("%v has %v points of health left\n", pokemonTwo.name, pokemonTwo.hp)
+	}
+	return nil
 }
