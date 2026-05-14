@@ -16,7 +16,8 @@ type Config struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	} `json:"results"`
-	Pokedex map[string]Pokemon
+	Pokedex  map[string]Pokemon
+	SavePath string
 }
 
 type Location struct {
@@ -34,8 +35,8 @@ type LocPokemon struct {
 }
 
 type Pokemon struct {
-	Name string `json:"name"`
-	BaseExperience int `json:"base_experience"`
+	Name           string `json:"name"`
+	BaseExperience int    `json:"base_experience"`
 	Stats          []struct {
 		BaseStat int `json:"base_stat"`
 		Stat     struct {
@@ -48,8 +49,6 @@ type Pokemon struct {
 		} `json:"ability"`
 	} `json:"abilities"`
 }
-
-
 
 var cachedResult *Cache
 
@@ -102,18 +101,18 @@ func GetPokemonAtLocation(location string) ([]LocPokemon, error) {
 	if err != nil {
 		return []LocPokemon{}, err
 	}
-	
+
 	result := make([]LocPokemon, 0, len(loc.PokemonEncounters))
-	for _, p := range loc.PokemonEncounters{
+	for _, p := range loc.PokemonEncounters {
 		result = append(result, LocPokemon{Name: p.Pokemon.Name, Url: p.Pokemon.URL})
 	}
 	return result, nil
 
 }
 
-func FindPokemon(selectedPokemon string)(Pokemon, error) {
+func FindPokemon(selectedPokemon string) (Pokemon, error) {
 	pok, err := makeCallWithString[Pokemon](selectedPokemon, "Pokemon")
-	if err != nil{
+	if err != nil {
 		return Pokemon{}, err
 	}
 	return pok, nil
@@ -197,8 +196,8 @@ func makeCallWithString[T any](param string, path string) (T, error) {
 	if cachedResult != nil {
 		cachedResult.Add(url, cacheData)
 	}
-	
-	if err := json.Unmarshal(cacheData, &result); err != nil{
+
+	if err := json.Unmarshal(cacheData, &result); err != nil {
 		return result, err
 	}
 	return result, nil

@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"encoding/json"
 
 	"github.com/beast447/pokedexcli/internal"
 )
@@ -70,6 +71,11 @@ func init() {
 			name:        "battle",
 			description: "Fight two pokemon that you have stored in your pokedex",
 			callback:    commandBattle,
+		},
+		"release": {
+			name: "release",
+			description: "Release a pokemon from your pokedex",
+			callback: commandRelease,
 		},
 	}
 }
@@ -139,7 +145,16 @@ func getPokemonStats(config *internal.Config, firstPokemon string, secondPokemon
 }
 
 func commandExit(data *internal.Config, explore string, second string) error {
+	fmt.Println("Saving your Pokedex...")
+	save, err := json.Marshal(data.Pokedex)
+	if err != nil{
+		return err
+	}
+	if err := os.WriteFile(data.SavePath, (save), 0777); err != nil{
+		return err
+	}
 	fmt.Print("Closing the Pokedex... Goodbye!")
+
 	os.Exit(0)
 	return nil
 }
@@ -205,6 +220,11 @@ func commandCatch(config *internal.Config, selectedPokemon string, second string
 	if err != nil {
 		return err
 	}
+	_, exists := config.Pokedex[selectedPokemon]
+	if exists{
+		fmt.Printf("You already caught %v!\n", selectedPokemon)
+		return nil
+	}
 	fmt.Printf("Throwing a Pokeball at %s...\n", selectedPokemon)
 	userChance := rand.Intn(640)
 	if userChance >= userPokemon.BaseExperience {
@@ -242,7 +262,8 @@ func commandInspect(config *internal.Config, selectedPokemon string, second stri
 		fmt.Printf("%s doesnt exist in your Pokedex yet\n", selectedPokemon)
 		return nil
 	} else {
-		fmt.Printf("%v\n\n", userPokemon.Name)
+		upperName := strings.ToUpper(userPokemon.Name)
+		fmt.Printf("\n\n    %v\n\n", upperName)
 		fmt.Println("------STATS--------")
 		for _, stat := range userPokemon.Stats {
 			fmt.Printf("- %v: %v\n", stat.Stat.Name, stat.BaseStat)
@@ -291,5 +312,17 @@ func commandBattle(config *internal.Config, firstPokemon string, secondPokemon s
 		fmt.Printf("%v attacks %v with %v points of damage\n", pokemonOne.name, pokemonTwo.name, pokemonOne.attack)
 		fmt.Printf("%v has %v points of health left\n", pokemonTwo.name, pokemonTwo.hp)
 	}
+	return nil
+}
+
+func commandRelease (config *internal.Config, pokemonToRelease string, second string) error {
+	_, exists := config.Pokedex[pokemonToRelease]
+	if !exists {
+		fmt.Printf("You dont have %v in your pokedex.\n", pokemonToRelease)
+		return nil
+	}
+	delete(config.Pokedex, pokemonToRelease)
+	fmt.Printf("%v was released!\n", pokemonToRelease)
+
 	return nil
 }
