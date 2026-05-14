@@ -16,8 +16,9 @@ type Config struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	} `json:"results"`
-	Pokedex  map[string]Pokemon
-	SavePath string
+	Pokedex            map[string]Pokemon
+	SavePath           string
+	CurrentAreaPokemon map[string]bool
 }
 
 type Location struct {
@@ -48,6 +49,23 @@ type Pokemon struct {
 			Name string `json:"name"`
 		} `json:"ability"`
 	} `json:"abilities"`
+	Moves []struct {
+		Move struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"move"`
+	} `json:"moves"`
+	Sprites struct {
+		FrontDefault string `json:"front_default"`
+	} `json:"sprites"`
+}
+
+type Move struct {
+	Name  string `json:"name"`
+	Power int    `json:"power"`
+	Type  struct {
+		Name string `json:"name"`
+	} `json:"type"`
 }
 
 var cachedResult *Cache
@@ -118,6 +136,13 @@ func FindPokemon(selectedPokemon string) (Pokemon, error) {
 	return pok, nil
 }
 
+func GetMove(name string) (Move, error) {
+	if cachedResult == nil {
+		cachedResult = NewCache(5 * time.Minute)
+	}
+	return makeCallWithString[Move](name, "Move")
+}
+
 func makeCallWithConfig(config Config, path string) (Config, error) {
 
 	var url string
@@ -171,6 +196,8 @@ func makeCallWithString[T any](param string, path string) (T, error) {
 		url = "https://pokeapi.co/api/v2/location-area/" + param
 	case "Pokemon":
 		url = "https://pokeapi.co/api/v2/pokemon/" + param
+	case "Move":
+		url = "https://pokeapi.co/api/v2/move/" + param
 	}
 
 	if cachedResult != nil {
